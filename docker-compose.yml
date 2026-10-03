@@ -1,0 +1,57 @@
+# ==============================================================================
+# mypupqc-admin — Super Admin frontend (CodeIgniter 3.1.13)
+# ==============================================================================
+#   docker compose up -d
+#   open http://localhost:8080/mypupqc-admin/
+#
+# Notes:
+#  * The project is mounted at /var/www/html/mypupqc-admin so the folder-name
+#    path baked into public/js/common.js resolves. See TECHNICAL-SPECIFICATIONS.md W18.
+#  * Defaults to host port 8080 so it can run beside myPUPQC on port 80.
+#    The client-side `baseURL` in public/js/common.js is hardcoded to
+#    'http://localhost/mypupqc-admin/' with NO port, so client-side redirects
+#    (window.location.href = baseURL + 'auth/signin') will aim at port 80.
+#    Either run with `ADMIN_PORT=80 docker compose up -d` (with myPUPQC stopped)
+#    or update common.js to include the port.
+#  * To use a locally running API, set `apiEnv = 'dev'` in public/js/common.js.
+# ==============================================================================
+
+name: mypupqc-admin
+
+services:
+  admin:
+    image: php:8.1-apache
+    container_name: mypupqc-admin
+    restart: unless-stopped
+    ports:
+      - "${ADMIN_PORT:-8080}:80"
+    environment:
+      CI_ENV: development
+      TZ: Asia/Manila
+    volumes:
+      - .:/var/www/html/mypupqc-admin
+    command: >
+      bash -lc "
+        a2enmod rewrite headers >/dev/null;
+        printf '%s\n' \
+          '<Directory /var/www/html>' \
+          '    Options Indexes FollowSymLinks' \
+          '    AllowOverride All' \
+          '    Require all granted' \
+          '</Directory>' \
+          > /etc/apache2/conf-available/mypupqc.conf;
+        a2enconf mypupqc >/dev/null;
+        printf 'date.timezone=Asia/Manila\nupload_max_filesize=32M\npost_max_size=32M\n' \
+          > /usr/local/etc/php/conf.d/mypupqc.ini;
+        mkdir -p /var/www/html/mypupqc-admin/application/cache/session \
+                 /var/www/html/mypupqc-admin/application/logs;
+        chown -R www-data:www-data /var/www/html/mypupqc-admin/application/cache \
+                                   /var/www/html/mypupqc-admin/application/logs 2>/dev/null || true;
+        echo '--> mypupqc-admin available at http://localhost:${ADMIN_PORT:-8080}/mypupqc-admin/';
+        exec apache2-foreground
+      "
+    healthcheck:
+      test: ["CMD-SHELL", "php -r 'exit(0);'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
